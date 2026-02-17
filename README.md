@@ -2,7 +2,6 @@
 
 deploys a 3-node MinIO cluster with using keepalived for VIP failover.
 
-```
 
 - **VM1**: MASTER node (priority 150) - holds VIP initially
 - **VM2**: BACKUP node (priority 140)
