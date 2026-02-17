@@ -8,10 +8,10 @@ set -e
 # ==========================================
 # CONFIGURATION - EDIT THESE VALUES
 # ==========================================
-VM1_IP="192.168.1.10"      # Change this to your VM1 IP
-VM2_IP="192.168.1.11"      # Change this to your VM2 IP
-VM3_IP="192.168.1.12"      # Change this to your VM3 IP
-VIP_ADDRESS="192.168.1.100" # Change this to your VIP
+VM1_IP="192.168.10.4"      # Change this to your VM1 IP
+VM2_IP="192.168.10.7"      # Change this to your VM2 IP
+VM3_IP="192.168.10.12"     # Change this to your VM3 IP
+VIP_ADDRESS="192.168.10.100" # Change this to your VIP
 
 # Optional: Override via command line arguments
 # Usage: ./deploy.sh VM1_IP VM2_IP VM3_IP VIP
@@ -29,9 +29,10 @@ KEEPALIVED_INTERFACE=""  # Empty = auto-detect
 KEEPALIVED_PASS="MinIO-Keepalived-Pass-2024"  # Change if needed
 MINIO_ROOT_USER="minioadmin"
 MINIO_ROOT_PASSWORD="MinIO-Root-Pass-2024-ChangeThis"  # CHANGE THIS!
-SSH_USER="root"
-SSH_KEY="~/.ssh/id_rsa"
+SSH_USER="ubuntu"  # Change to "root" if your VMs use root user
+SSH_KEY=""  # Will auto-detect if empty
 MINIO_IMAGE="docker.arvancloud.ir/minio/minio:latest"
+KEEPALIVED_IMAGE="arcts/keepalived:latest"
 
 # ==========================================
 # SCRIPT EXECUTION
@@ -54,8 +55,35 @@ if ! command -v ansible-playbook &> /dev/null; then
     exit 1
 fi
 
-# Expand tilde in SSH key path
-SSH_KEY="${SSH_KEY/#\~/$HOME}"
+# Install required Ansible collections
+echo "Installing required Ansible collections..."
+ansible-galaxy collection install -r requirements.yml
+
+# Auto-detect SSH key if not specified
+if [ -z "$SSH_KEY" ]; then
+    SSH_DIR="$HOME/.ssh"
+    # Try common SSH key names in order of preference
+    if [ -f "$SSH_DIR/id_ed25519" ]; then
+        SSH_KEY="$SSH_DIR/id_ed25519"
+    elif [ -f "$SSH_DIR/id_rsa" ]; then
+        SSH_KEY="$SSH_DIR/id_rsa"
+    elif [ -f "$SSH_DIR/id_ecdsa" ]; then
+        SSH_KEY="$SSH_DIR/id_ecdsa"
+    else
+        echo "Error: No SSH key found. Please set SSH_KEY in the script or create one."
+        exit 1
+    fi
+    echo "Auto-detected SSH key: $SSH_KEY"
+else
+    # Expand tilde in SSH key path
+    SSH_KEY="${SSH_KEY/#\~/$HOME}"
+fi
+
+# Verify SSH key exists
+if [ ! -f "$SSH_KEY" ]; then
+    echo "Error: SSH key not found: $SSH_KEY"
+    exit 1
+fi
 
 # Create vars.yml
 VARS_FILE="vars.yml"
@@ -69,6 +97,7 @@ keepalived_auth_pass: "${KEEPALIVED_PASS}"
 minio_root_user: "${MINIO_ROOT_USER}"
 minio_root_password: "${MINIO_ROOT_PASSWORD}"
 minio_image: "${MINIO_IMAGE}"
+keepalived_image: "${KEEPALIVED_IMAGE}"
 ssh_user: "${SSH_USER}"
 ssh_key_path: "${SSH_KEY}"
 EOF
@@ -82,8 +111,7 @@ echo ""
 ansible-playbook \
   -i inventory.yml \
   -e @vars.yml \
-  playbook.yml \
-  --ask-become-pass
+  playbook.yml
 
 echo ""
 echo "=========================================="

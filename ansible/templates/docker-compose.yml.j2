@@ -3,13 +3,10 @@ services:
     image: {{ minio_image }}
     container_name: minio
     restart: unless-stopped
+    network_mode: host
 
     env_file:
       - .env
-
-    ports:
-      - "9000:9000"
-      - "9001:9001"
 
     volumes:
       - /srv/minio/data1:/data1
@@ -17,14 +14,41 @@ services:
 
     command: >
       server
-      --address ":9000"
-      --console-address ":9001"
-      http://${IP1}/data1 http://${IP1}/data2
-      http://${IP2}/data1 http://${IP2}/data2
-      http://${IP3}/data1 http://${IP3}/data2
+      --address "{{ my_ip }}:9000"
+      --console-address "{{ my_ip }}:9001"
+      {% if my_ip == vm1_ip %}
+      http://{{ vm1_ip }}/data1 http://{{ vm1_ip }}/data2
+      http://{{ vm2_ip }}/data1 http://{{ vm2_ip }}/data2
+      http://{{ vm3_ip }}/data1 http://{{ vm3_ip }}/data2
+      {% elif my_ip == vm2_ip %}
+      http://{{ vm2_ip }}/data1 http://{{ vm2_ip }}/data2
+      http://{{ vm1_ip }}/data1 http://{{ vm1_ip }}/data2
+      http://{{ vm3_ip }}/data1 http://{{ vm3_ip }}/data2
+      {% else %}
+      http://{{ vm3_ip }}/data1 http://{{ vm3_ip }}/data2
+      http://{{ vm1_ip }}/data1 http://{{ vm1_ip }}/data2
+      http://{{ vm2_ip }}/data1 http://{{ vm2_ip }}/data2
+      {% endif %}
 
     healthcheck:
       test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 9000"]
       interval: 5s
       timeout: 2s
       retries: 20
+
+  keepalived:
+    image: {{ keepalived_image }}
+    container_name: keepalived
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_BROADCAST
+      - NET_RAW
+      - SYS_TIME
+      - SYS_RESOURCE
+    volumes:
+      - {{ keepalived_config_dir }}/keepalived.conf:/etc/keepalived/keepalived.conf:ro
+      - {{ keepalived_config_dir }}/check_minio.sh:/etc/keepalived/check_minio.sh:ro
+    command: ["/usr/sbin/keepalived", "-n", "-l", "-D", "-f", "/etc/keepalived/keepalived.conf"]

@@ -4,43 +4,97 @@
   become: yes
   vars:
     minio_data_dir: /srv/minio
-    keepalived_config_dir: /etc/keepalived
-    docker_compose_version: "2.24.0"
+    keepalived_config_dir: /root/keepalived
     
   tasks:
     - name: Gather facts
       setup:
 
-    - name: Install required packages
-      package:
-        name:
-          - docker.io
-          - docker-compose
-          - keepalived
-          - netcat-openbsd
-          - python3-pip
-        state: present
-        update_cache: yes
-      when: ansible_pkg_mgr == 'apt'
+    # ==========================================
+    # Pre-flight checks
+    # ==========================================
+    - name: Verify Docker is installed
+      command: docker --version
+      register: docker_check
+      changed_when: false
+      failed_when: false
 
-    - name: Install required packages (RHEL/CentOS)
-      package:
-        name:
-          - docker
-          - docker-compose
-          - keepalived
-          - nc
-          - python3-pip
-        state: present
-      when: ansible_pkg_mgr == 'yum' or ansible_pkg_mgr == 'dnf'
+    - name: Verify Docker Compose is installed
+      command: docker compose version
+      register: docker_compose_check
+      changed_when: false
+      failed_when: false
 
-    - name: Install Docker SDK for Python
-      pip:
-        name:
-          - docker
-          - docker-compose
-        state: present
+    - name: Fail if Docker is not installed
+      fail:
+        msg: "Docker is not installed. Please install Docker manually."
+      when: docker_check.rc != 0
 
+    - name: Fail if Docker Compose is not installed
+      fail:
+        msg: "Docker Compose is not installed. Please install Docker Compose manually."
+      when: docker_compose_check.rc != 0
+
+    - name: Check if MinIO image exists locally
+      shell: docker images -q "{{ minio_image }}" | head -1
+      register: minio_image_exists
+      changed_when: false
+      failed_when: false
+
+    - name: Check if keepalived image exists locally
+      shell: docker images -q "{{ keepalived_image }}" | head -1
+      register: keepalived_image_exists
+      changed_when: false
+      failed_when: false
+
+    - name: Verify MinIO image exists
+      fail:
+        msg: "MinIO image {{ minio_image }} is not found. Please ensure the image is loaded on this VM."
+      when: minio_image_exists.stdout == ""
+
+    - name: Verify keepalived image exists
+      fail:
+        msg: "Keepalived image {{ keepalived_image }} is not found. Please load it: docker pull {{ keepalived_image }}"
+      when: keepalived_image_exists.stdout == ""
+
+    # ==========================================
+    # Detect and set variables
+    # ==========================================
+    - name: Detect network interface
+      shell: |
+        ip route | grep default | awk '{print $5}' | head -1 || echo "eth0"
+      register: interface_result
+      changed_when: false
+      failed_when: false
+
+    - name: Set network interface
+      set_fact:
+        detected_interface: "{{ interface_result.stdout | trim | default('eth0') }}"
+
+    - name: Set keepalived interface
+      set_fact:
+        keepalived_interface_final: "{{ (keepalived_interface | trim) if (keepalived_interface is defined and keepalived_interface | trim != '') else detected_interface }}"
+
+    - name: Finalize keepalived interface
+      set_fact:
+        keepalived_interface_final: "eth0"
+      when: keepalived_interface_final is not defined or keepalived_interface_final | trim == ""
+
+    - name: Debug interface detection
+      debug:
+        msg: "Detected interface: {{ detected_interface }}, Final interface: {{ keepalived_interface_final }}"
+
+    - name: Set my_ip variable based on node
+      set_fact:
+        my_ip: "{{ vm1_ip if node_id == 1 else (vm2_ip if node_id == 2 else vm3_ip) }}"
+
+    - name: Debug my_ip
+      debug:
+        msg: "Node {{ node_id }} IP: {{ my_ip }}"
+
+    # ==========================================
+    # Create directories
+    # ==========================================
     - name: Start and enable Docker service
       systemd:
         name: docker
@@ -66,7 +120,7 @@
         group: root
         mode: '0755'
 
-    - name: Create keepalived scripts directory
+    - name: Create keepalived config directory
       file:
         path: "{{ keepalived_config_dir }}"
         state: directory
@@ -74,6 +128,9 @@
         group: root
         mode: '0755'
 
+    # ==========================================
+    # Deploy configuration files
+    # ==========================================
     - name: Deploy MinIO health check script
       template:
         src: check_minio.sh.j2
@@ -82,6 +139,11 @@
         group: root
         mode: '0755'
 
+    - name: Verify interface is set
+      fail:
+        msg: "Network interface is not set. Detected: {{ detected_interface | default('NOT SET') }}, Final: {{ keepalived_interface_final | default('NOT SET') }}"
+      when: keepalived_interface_final is not defined or keepalived_interface_final | trim == ""
+
     - name: Deploy keepalived configuration
       template:
         src: keepalived.conf.j2
@@ -89,7 +151,6 @@
         owner: root
         group: root
         mode: '0644'
-      notify: restart keepalived
 
     - name: Deploy MinIO .env file
       template:
@@ -98,6 +159,8 @@
         owner: root
         group: root
         mode: '0600'
+      vars:
+        my_ip: "{{ my_ip }}"
 
     - name: Deploy MinIO docker-compose.yml
       template:
@@ -106,33 +169,54 @@
         owner: root
         group: root
         mode: '0644'
+      vars:
+        my_ip: "{{ my_ip }}"
+        vm1_ip: "{{ vm1_ip }}"
+        vm2_ip: "{{ vm2_ip }}"
+        vm3_ip: "{{ vm3_ip }}"
 
-    - name: Start and enable keepalived service
-      systemd:
-        name: keepalived
-        state: started
-        enabled: yes
+    # ==========================================
+    # Start services in correct order
+    # ==========================================
+    - name: Stop existing containers
+      shell: |
+        cd /root/minio
+        docker compose down || true
+      ignore_errors: yes
 
-    - name: Pull MinIO Docker image
-      docker_image:
-        name: "{{ minio_image }}"
-        source: pull
-
-    - name: Start MinIO containers
-      docker_compose:
+    - name: Start MinIO container first
+      community.docker.docker_compose_v2:
         project_src: /root/minio
         state: present
-        restarted: yes
+        services:
+          - minio
 
     - name: Wait for MinIO to be ready
       wait_for:
         port: 9000
         host: 127.0.0.1
-        delay: 5
-        timeout: 60
+        delay: 10
+        timeout: 120
 
-  handlers:
-    - name: restart keepalived
-      systemd:
-        name: keepalived
-        state: restarted
+    - name: Start keepalived container (after MinIO is ready)
+      community.docker.docker_compose_v2:
+        project_src: /root/minio
+        state: present
+        services:
+          - keepalived
+
+    - name: Verify MinIO container is running
+      shell: docker ps --filter name=minio --format "{{ '{{' }}.Names{{ '}}' }}"
+      register: minio_status
+      changed_when: false
+
+    - name: Verify keepalived container is running
+      shell: docker ps --filter name=keepalived --format "{{ '{{' }}.Names{{ '}}' }}"
+      register: keepalived_status
+      changed_when: false
+
+    - name: Display container status
+      debug:
+        msg:
+          - "MinIO: {{ minio_status.stdout }}"
+          - "Keepalived: {{ keepalived_status.stdout }}"

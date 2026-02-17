@@ -12,7 +12,7 @@ vrrp_script chk_minio {
 
 vrrp_instance VI_1 {
   state {{ keepalived_state }}
-  interface {{ keepalived_interface | default(ansible_default_ipv4.interface) }}
+  interface {{ keepalived_interface_final }}
   virtual_router_id 51
   priority {{ keepalived_priority }}
   advert_int 1
