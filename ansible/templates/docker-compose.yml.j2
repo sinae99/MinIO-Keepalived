@@ -14,21 +14,11 @@ services:
 
     command: >
       server
-      --address "{{ my_ip }}:9000"
-      --console-address "{{ my_ip }}:9001"
-      {% if my_ip == vm1_ip %}
+      --address "0.0.0.0:9000"
+      --console-address "0.0.0.0:9001"
       http://{{ vm1_ip }}/data1 http://{{ vm1_ip }}/data2
       http://{{ vm2_ip }}/data1 http://{{ vm2_ip }}/data2
       http://{{ vm3_ip }}/data1 http://{{ vm3_ip }}/data2
-      {% elif my_ip == vm2_ip %}
-      http://{{ vm2_ip }}/data1 http://{{ vm2_ip }}/data2
-      http://{{ vm1_ip }}/data1 http://{{ vm1_ip }}/data2
-      http://{{ vm3_ip }}/data1 http://{{ vm3_ip }}/data2
-      {% else %}
-      http://{{ vm3_ip }}/data1 http://{{ vm3_ip }}/data2
-      http://{{ vm1_ip }}/data1 http://{{ vm1_ip }}/data2
-      http://{{ vm2_ip }}/data1 http://{{ vm2_ip }}/data2
-      {% endif %}
 
     healthcheck:
       test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 9000"]
