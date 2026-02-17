@@ -1,0 +1,138 @@
+---
+- name: Deploy MinIO Cluster with Keepalived VIP
+  hosts: minio_nodes
+  become: yes
+  vars:
+    minio_data_dir: /srv/minio
+    keepalived_config_dir: /etc/keepalived
+    docker_compose_version: "2.24.0"
+    
+  tasks:
+    - name: Gather facts
+      setup:
+
+    - name: Install required packages
+      package:
+        name:
+          - docker.io
+          - docker-compose
+          - keepalived
+          - netcat-openbsd
+          - python3-pip
+        state: present
+        update_cache: yes
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Install required packages (RHEL/CentOS)
+      package:
+        name:
+          - docker
+          - docker-compose
+          - keepalived
+          - nc
+          - python3-pip
+        state: present
+      when: ansible_pkg_mgr == 'yum' or ansible_pkg_mgr == 'dnf'
+
+    - name: Install Docker SDK for Python
+      pip:
+        name:
+          - docker
+          - docker-compose
+        state: present
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create MinIO data directories
+      file:
+        path: "{{ minio_data_dir }}/data{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - 1
+        - 2
+
+    - name: Create MinIO deployment directory
+      file:
+        path: /root/minio
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create keepalived scripts directory
+      file:
+        path: "{{ keepalived_config_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Deploy MinIO health check script
+      template:
+        src: check_minio.sh.j2
+        dest: "{{ keepalived_config_dir }}/check_minio.sh"
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Deploy keepalived configuration
+      template:
+        src: keepalived.conf.j2
+        dest: "{{ keepalived_config_dir }}/keepalived.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart keepalived
+
+    - name: Deploy MinIO .env file
+      template:
+        src: minio.env.j2
+        dest: "/root/minio/.env"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Deploy MinIO docker-compose.yml
+      template:
+        src: docker-compose.yml.j2
+        dest: "/root/minio/docker-compose.yml"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Start and enable keepalived service
+      systemd:
+        name: keepalived
+        state: started
+        enabled: yes
+
+    - name: Pull MinIO Docker image
+      docker_image:
+        name: "{{ minio_image }}"
+        source: pull
+
+    - name: Start MinIO containers
+      docker_compose:
+        project_src: /root/minio
+        state: present
+        restarted: yes
+
+    - name: Wait for MinIO to be ready
+      wait_for:
+        port: 9000
+        host: 127.0.0.1
+        delay: 5
+        timeout: 60
+
+  handlers:
+    - name: restart keepalived
+      systemd:
+        name: keepalived
+        state: restarted

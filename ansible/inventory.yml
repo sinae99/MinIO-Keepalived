@@ -1,0 +1,26 @@
+all:
+  children:
+    minio_nodes:
+      hosts:
+        vm1:
+          ansible_host: "{{ vm1_ip }}"
+          node_id: 1
+          keepalived_priority: 150
+          keepalived_state: MASTER
+          keepalived_router_id: MINIO_VIP_1
+        vm2:
+          ansible_host: "{{ vm2_ip }}"
+          node_id: 2
+          keepalived_priority: 140
+          keepalived_state: BACKUP
+          keepalived_router_id: MINIO_VIP_2
+        vm3:
+          ansible_host: "{{ vm3_ip }}"
+          node_id: 3
+          keepalived_priority: 130
+          keepalived_state: BACKUP
+          keepalived_router_id: MINIO_VIP_3
+      vars:
+        ansible_user: "{{ ssh_user | default('root') }}"
+        ansible_ssh_private_key_file: "{{ ssh_key_path | default('~/.ssh/id_rsa') }}"
+        ansible_python_interpreter: /usr/bin/python3

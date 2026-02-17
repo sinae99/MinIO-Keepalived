@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Exit 0 = OK, exit non-zero = FAIL
+
+nc -z 127.0.0.1 9000
+

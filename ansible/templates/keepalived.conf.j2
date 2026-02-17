@@ -1,0 +1,32 @@
+global_defs {
+  router_id {{ keepalived_router_id }}
+}
+
+vrrp_script chk_minio {
+  script "/etc/keepalived/check_minio.sh"
+  interval 2
+  timeout 1
+  fall 2
+  rise 2
+}
+
+vrrp_instance VI_1 {
+  state {{ keepalived_state }}
+  interface {{ keepalived_interface | default(ansible_default_ipv4.interface) }}
+  virtual_router_id 51
+  priority {{ keepalived_priority }}
+  advert_int 1
+
+  authentication {
+    auth_type PASS
+    auth_pass {{ keepalived_auth_pass }}
+  }
+
+  virtual_ipaddress {
+    {{ vip_address }}/32
+  }
+
+  track_script {
+    chk_minio
+  }
+}

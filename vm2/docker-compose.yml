@@ -1,0 +1,31 @@
+services:
+  minio:
+    image: docker.arvancloud.ir/minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+    volumes:
+      - /srv/minio/data1:/data1
+      - /srv/minio/data2:/data2
+
+    command: >
+      server
+      --address ":9000"
+      --console-address ":9001"
+      http://${IP1}/data1 http://${IP1}/data2
+      http://${IP2}/data1 http://${IP2}/data2
+      http://${IP3}/data1 http://${IP3}/data2
+
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 9000"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+
