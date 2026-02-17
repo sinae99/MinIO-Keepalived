@@ -151,6 +151,11 @@
         owner: root
         group: root
         mode: '0644'
+      vars:
+        my_ip: "{{ my_ip }}"
+        vm1_ip: "{{ vm1_ip }}"
+        vm2_ip: "{{ vm2_ip }}"
+        vm3_ip: "{{ vm3_ip }}"
 
     - name: Deploy MinIO .env file
       template:

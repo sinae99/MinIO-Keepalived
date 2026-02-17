@@ -16,6 +16,18 @@ vrrp_instance VI_1 {
   virtual_router_id 51
   priority {{ keepalived_priority }}
   advert_int 1
+  unicast_src_ip {{ my_ip }}
+  unicast_peer {
+    {% if my_ip != vm1_ip %}
+    {{ vm1_ip }}
+    {% endif %}
+    {% if my_ip != vm2_ip %}
+    {{ vm2_ip }}
+    {% endif %}
+    {% if my_ip != vm3_ip %}
+    {{ vm3_ip }}
+    {% endif %}
+  }
 
   authentication {
     auth_type PASS
