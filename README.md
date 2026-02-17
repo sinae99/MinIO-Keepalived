@@ -12,13 +12,8 @@ deploys a 3-node MinIO cluster with using keepalived for VIP failover.
 
 ### On Gateway Machine (where you run deploy.sh)
 
-- **Ansible** installed:
-  ```bash
-  sudo apt-get install ansible
-  # or
-  pip install ansible
-  ```
-- **SSH access** to all 3 VMs (passwordless SSH key recommended)
+- **Ansible** installed
+- **SSH access** to all 3 VMs (passwordless)
 
 
 ### On Remote VMs (VM1, VM2, VM3)
