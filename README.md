@@ -17,6 +17,26 @@ Deploys a 3-node MinIO cluster with Keepalived for VIP failover.
    ./deploy.sh
    ```
 
+Optional: pass IPs and VIP as arguments:
+```bash
+./deploy.sh 192.168.1.10 192.168.1.11 192.168.1.12 192.168.1.100
+```
+
+## Cleanup
+
+To remove everything (containers, volumes, directories):
+
+```bash
+cd ansible
+./cleanup.sh
+```
+
+**Important:** Make sure `DEPLOY_USER` and `MINIO_DATA_DIR` in `cleanup.sh` match your `deploy.sh` settings.
+
+The cleanup script will:
+- Stop and remove `minio` and `keepalived` containers
+- Remove deployment directories (`/home/<user>/minio`, `/home/<user>/keepalived`)
+- Remove MinIO data directories (`<MINIO_DATA_DIR>/data1`, `<MINIO_DATA_DIR>/data2`)
 
 ## Configuration (all in `ansible/deploy.sh`)
 

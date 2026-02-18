@@ -21,10 +21,11 @@ services:
       http://{{ vm3_ip }}/data1 http://{{ vm3_ip }}/data2
 
     healthcheck:
-      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 9000"]
-      interval: 5s
-      timeout: 2s
-      retries: 20
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   keepalived:
     image: {{ keepalived_image }}
