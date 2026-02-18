@@ -3,8 +3,11 @@
   hosts: minio_nodes
   become: yes
   vars:
-    minio_data_dir: /srv/minio
-    keepalived_config_dir: /root/keepalived
+    minio_data_dir: "{{ minio_data_dir | default('/srv/minio') }}"
+    deploy_user: "{{ deploy_user | default('user') }}"
+    deploy_home: "/home/{{ deploy_user }}"
+    minio_deploy_dir: "{{ deploy_home }}/minio"
+    keepalived_config_dir: "{{ deploy_home }}/keepalived"
     
   tasks:
     - name: Gather facts
@@ -105,8 +108,8 @@
       file:
         path: "{{ minio_data_dir }}/data{{ item }}"
         state: directory
-        owner: root
-        group: root
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
         mode: '0755'
       loop:
         - 1
@@ -114,18 +117,18 @@
 
     - name: Create MinIO deployment directory
       file:
-        path: /root/minio
+        path: "{{ minio_deploy_dir }}"
         state: directory
-        owner: root
-        group: root
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
         mode: '0755'
 
     - name: Create keepalived config directory
       file:
         path: "{{ keepalived_config_dir }}"
         state: directory
-        owner: root
-        group: root
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
         mode: '0755'
 
     # ==========================================
@@ -135,8 +138,8 @@
       template:
         src: check_minio.sh.j2
         dest: "{{ keepalived_config_dir }}/check_minio.sh"
-        owner: root
-        group: root
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
         mode: '0755'
 
     - name: Verify interface is set
@@ -148,8 +151,8 @@
       template:
         src: keepalived.conf.j2
         dest: "{{ keepalived_config_dir }}/keepalived.conf"
-        owner: root
-        group: root
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
         mode: '0644'
       vars:
         my_ip: "{{ my_ip }}"
@@ -160,9 +163,9 @@
     - name: Deploy MinIO .env file
       template:
         src: minio.env.j2
-        dest: "/root/minio/.env"
-        owner: root
-        group: root
+        dest: "{{ minio_deploy_dir }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
         mode: '0600'
       vars:
         my_ip: "{{ my_ip }}"
@@ -170,9 +173,9 @@
     - name: Deploy MinIO docker-compose.yml
       template:
         src: docker-compose.yml.j2
-        dest: "/root/minio/docker-compose.yml"
-        owner: root
-        group: root
+        dest: "{{ minio_deploy_dir }}/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
         mode: '0644'
       vars:
         my_ip: "{{ my_ip }}"
@@ -185,13 +188,13 @@
     # ==========================================
     - name: Stop existing containers
       shell: |
-        cd /root/minio
+        cd {{ minio_deploy_dir }}
         docker compose down || true
       ignore_errors: yes
 
     - name: Start MinIO container first
       community.docker.docker_compose_v2:
-        project_src: /root/minio
+        project_src: "{{ minio_deploy_dir }}"
         state: present
         services:
           - minio
@@ -205,7 +208,7 @@
 
     - name: Start keepalived container (after MinIO is ready)
       community.docker.docker_compose_v2:
-        project_src: /root/minio
+        project_src: "{{ minio_deploy_dir }}"
         state: present
         services:
           - keepalived

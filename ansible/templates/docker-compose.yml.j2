@@ -9,8 +9,8 @@ services:
       - .env
 
     volumes:
-      - /srv/minio/data1:/data1
-      - /srv/minio/data2:/data2
+      - {{ minio_data_dir }}/data1:/data1
+      - {{ minio_data_dir }}/data2:/data2
 
     command: >
       server
